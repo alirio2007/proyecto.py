@@ -5,3 +5,219 @@ from tkinter import ttk, messagebox
 from io import BytesIO
 import csv
 
+class ObraDeArte:
+    """
+    Esto es como una ficha de información para cada obra.
+    Aquí se guardan todos los detalles de una obra:
+    título, artista, año, etc.
+    """
+
+    def __init__(self, id_obra, titulo, artista, nacionalidad_artista, fecha_nacimiento, 
+                 fecha_muerte, tipo, año_creacion, departamento, urlImagen):
+        """
+        Esta parte prepara el espacio para guardar los detalles de la obra.
+        Si algún dato falta, le ponemos "SIN TITULO", "DESCONOCIDO", etc.
+        para que no se quede vacío.
+        """
+        self.id_obra = id_obra
+        self.titulo = titulo if titulo else "SIN TITULO"
+        self.artista = artista if artista else "ARTISTA DESCONOCIDO"
+        self.nacionalidad_artista = nacionalidad_artista if nacionalidad_artista else "NACIONALIDAD DESCONOCIDA"
+        self.fecha_nacimiento = fecha_nacimiento if fecha_nacimiento else "?"
+        self.fecha_muerte = fecha_muerte if fecha_muerte else "?"
+        self.tipo = tipo if tipo else "Sin clasificación"
+        self.año_creacion = año_creacion if año_creacion else "?"
+        self.departamento = departamento if departamento else "SIN DEPARTAMENTO"
+        self.urlImagen = urlImagen if urlImagen else None
+    
+    def mostrarDetalles(self):
+        """
+        Esta parte junta todos los detalles de la obra en un solo texto.
+        Así se podra mostrar de forma ordenada.
+        """
+        detalles = [
+            f"ID: {self.id_obra}",
+            f"Título: {self.titulo}",
+            f"Artista: {self.artista}",
+            f"Nacionalidad: {self.nacionalidad_artista}",
+            f"Vida: {self.fecha_nacimiento} - {self.fecha_muerte}",
+            f"Tipo: {self.tipo}",
+            f"Año de creación: {self.año_creacion}",
+            f"Departamento: {self.departamento}"
+        ]
+        return "\n".join(detalles)
+
+class CatalogoMuseo:
+    """
+    Este es el administrador que se encarga de todo:
+    se conecta al museo, descarga las obras y las organiza.
+    """
+    
+    def __init__(self):
+        """Prepara el catálogo vacío para empezar a llenarlo."""
+        self.obras = [] # Aquí se guardarán todas las obras
+        self.departamentos = set() # Aquí se guardarán los nombres de los departamentos
+        self.nacionalidades = set() # Aquí se guardarán las nacionalidades
+        self.artistas = set() # Aquí se guardarán los nombres de los artistas
+        self.cargando = False
+        self.datos_cargados = False
+
+    def cargarApi(self, progreso_callback=None):
+        """
+        Esta parte se conecta a internet para descargar las obras del museo.
+        Lo hace en segundo plano para que la aplicación no se congele.
+        """
+        self.cargando = True
+
+        try:
+            # Pide la lista de obras al museo
+            response = requests.get("https://collectionapi.metmuseum.org/public/collection/v1/objects")
+            if response.status_code != 200:
+                raise ConnectionError("¡No se pudo conectar al museo por internet!")
+            
+            # Limita las obras a 200 para que la descarga sea más rápida
+            obras_ids = response.json().get('objectIDs', [])[:200]
+            
+# Pide los detalles de cada obra, uno por uno
+            for i, obra_id in enumerate(obras_ids):
+                if progreso_callback:
+                    progreso_callback(i, len(obras_ids))
+                
+                try:
+                    obra_response = requests.get(
+                        f"https://collectionapi.metmuseum.org/public/collection/v1/objects/{obra_id}",
+                        timeout=20
+                    )
+                    if obra_response.status_code == 200:
+                        self._procesar_obra(obra_response.json())
+                except requests.RequestException:
+                    continue
+            
+            self.datos_cargados = True
+        except Exception as e:
+            print(f"¡ERROR al cargar los datos!: {e}")
+        finally:
+            self.cargando = False
+    
+    def _procesar_obra(self, obra_data):
+        """
+        Esta parte toma los datos que llegaron del museo y los
+        acomoda en una "ficha de obra" usando nuestro molde `ObraDeArte`.
+        """
+        obra = ObraDeArte(
+            obra_data.get('objectID'),
+            obra_data.get('title'),
+            obra_data.get('artistDisplayName'),
+            obra_data.get('artistNationality'),
+            obra_data.get('artistBeginDate'),
+            obra_data.get('artistEndDate'),
+            obra_data.get('classification'),
+            obra_data.get('objectDate'),
+            obra_data.get('department'),
+            obra_data.get('primaryImageSmall')
+        )
+        
+        # Guarda la obra en la lista y también los nombres únicos de
+        # departamentos, nacionalidades y artistas.
+        self.obras.append(obra)
+        if obra.departamento:
+            self.departamentos.add(obra.departamento)
+        if obra.nacionalidad_artista and obra.nacionalidad_artista != "NACIONALIDAD DESCONOCIDA":
+            self.nacionalidades.add(obra.nacionalidad_artista)
+        if obra.artista and obra.artista != "ARTISTA DESCONOCIDO":
+            self.artistas.add(obra.artista)
+    
+    # Herramientas de búsqueda para encontrar obras
+    def buscarPorDepartamento(self, departamento):
+        """Busca y devuelve obras de un departamento específico."""
+        return [obra for obra in self.obras if obra.departamento == departamento]
+    
+    def buscarPorNacionalidad(self, nacionalidad_artista):
+        """Busca y devuelve obras de artistas de una nacionalidad específica."""
+        return [obra for obra in self.obras if obra.nacionalidad_artista == nacionalidad_artista]
+    
+    def buscarPorArtista(self, nombre_artista):
+        """Busca y devuelve obras de un artista específico (o parte del nombre)."""
+        nombre_lower = nombre_artista.lower()
+        return [obra for obra in self.obras if nombre_lower in obra.artista.lower()]
+    
+    def obtenerObraPorId(self, id_obra):
+        """Busca y devuelve una obra por su número de identificación único."""
+        for obra in self.obras:
+            if obra.id_obra == id_obra:
+                return obra
+        return None
+
+class InterfazCatalogo:
+    """
+    Esta parte es la que crea los botones, las listas y las ventanas
+    para que puedas interactuar con el programa.
+    """
+    
+    def __init__(self, root):
+        """
+        Prepara la ventana principal del programa.
+        """
+        self.root = root
+        self.catalogo = CatalogoMuseo()
+        self.setupUi()
+        self.cargaDatos()
+    
+    def setupUi(self):
+        """Configura el título de la ventana y los estilos de los botones."""
+        self.root.title("OBRAS DEL MUSEO / SISTEMA DE INGENIERIA")
+        self.root.state('zoomed') # Maximiza la ventana
+        
+        self.main_frame = ttk.Frame(self.root, padding="10")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Una barra para mostrar mensajes en la parte de abajo
+        self.status_var = tk.StringVar()
+        self.status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        self.mostrarPantallaInicio()
+    
+    def mostrarPantallaInicio(self):
+        """Muestra el menú principal con los botones de búsqueda."""
+        self.limpiarPantalla()
+        
+        # Títulos y botones
+        ttk.Label(self.main_frame, text="SISTEMA DE INGENIERIA", font=("Arial", 20, "bold")).pack(pady=20)
+        ttk.Label(self.main_frame, text="CATALOGO DE OBRAS REALIZADAS", font=("Arial", 15, "bold")).pack(pady=20)
+        ttk.Label(self.main_frame, text="INDIQUE UNA OPCION", font=("Arial", 12, "bold")).pack(pady=10)
+        
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.pack(pady=20)
+        
+        ttk.Button(btn_frame, text="DEPARTAMENTO", command=self.mostrarDepartamentos, width=25).pack(pady=10, fill=tk.X)
+        ttk.Button(btn_frame, text="NACIONALIDAD", command=self.mostrarNacionalidades, width=25).pack(pady=10, fill=tk.X)
+        ttk.Button(btn_frame, text="ARTISTA", command=self.buscarPorArtista, width=25).pack(pady=10, fill=tk.X)
+        ttk.Button(btn_frame, text="SALIR", command=self.root.quit, width=25).pack(pady=10, fill=tk.X)
+        
+        self.actualizarEstado("LOS DATOS HAN SIDO CARGADOS CON EXITO..!")
+    
+    def limpiarPantalla(self):
+        """Borra todo lo que hay en la ventana principal para mostrar una nueva pantalla."""
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+    
+    def actualizarEstado(self, mensaje):
+        """Pone un mensaje nuevo en la barra de estado de la parte de abajo."""
+        self.status_var.set(mensaje)
+        self.root.update_idletasks()
+    
+    def cargaDatos(self):
+        """Muestra un mensaje de carga y empieza a descargar los datos del museo."""
+        self.actualizarEstado("CARGANDO DATOS...")
+        
+        ttk.Label(self.main_frame, text="CARGANDO DATOS...", font=("Arial", 17, "bold")).pack()
+        ttk.Label(self.main_frame, text="POR FAVOR ESPERE...!", font=("Arial", 17, "bold")).pack()
+        
+        def cargarCompletado():
+            self.mostrarPantallaInicio()
+        
+        # Le dice al "Administrador" que cargue los datos en segundo plano
+        threading.Thread(target=self.catalogo.cargarApi, daemon=True).start()
+        
+
