@@ -220,4 +220,245 @@ class InterfazCatalogo:
         # Le dice al "Administrador" que cargue los datos en segundo plano
         threading.Thread(target=self.catalogo.cargarApi, daemon=True).start()
         
+# Revisa cada 100 milisegundos si la carga de datos ya terminó
+        self.root.after(100, self.verificarCarga, cargarCompletado)
+    
+    def verificarCarga(self, callback):
+        """Revisa si la descarga terminó para seguir al siguiente paso."""
+        if self.catalogo.cargando:
+            self.root.after(100, self.verificarCarga, callback)
+        else:
+            if self.catalogo.datos_cargados:
+                callback()
+            else:
+                messagebox.showerror("AVISO", "NO SE PUDIERON CARGAR LOS DATOS. INTENTE MAS TARDE.")
+                self.root.quit()
+                
+            ttk.Label(self.main_frame, text="LA CARGA DE DATOS HA SIDO COMPLETADO CON EXITO..!", font=("Arial", 17, "bold")).pack()
+    
+    def mostrarDepartamentos(self):
+        """Muestra una lista con todos los departamentos del museo."""
+        self.limpiarPantalla()
+        
+        ttk.Label(self.main_frame, text="SELECCIONE UN DEPARTAMENTO:", font=("Arial", 12)).pack(pady=10)
+        
+        list_frame = ttk.Frame(self.main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.departamentos_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=("Arial", 11), height=15)
+        self.departamentos_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.departamentos_list.yview)
+        
+        for depto in sorted(self.catalogo.departamentos):
+            self.departamentos_list.insert(tk.END, depto)
+        
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(btn_frame, text="SELECCIONAR", command=self.seleccionarDepartamento).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="ATRAS", command=self.mostrarPantallaInicio).pack(side=tk.LEFT, padx=5)
+        
+        self.actualizarEstado(f"{len(self.catalogo.departamentos)} DEPARTAMENTOS DISPONIBLES")
+    
+    def seleccionarDepartamento(self):
+        """Busca las obras del departamento que seleccionaste en la lista."""
+        seleccion = self.departamentos_list.curselection()
+        if not seleccion:
+            messagebox.showwarning("AVISO", "INDIQUE UN DEPARTAMENTO..!")
+            return
+        
+        departamento = self.departamentos_list.get(seleccion[0])
+        obras = self.catalogo.buscarPorDepartamento(departamento)
+        
+        if not obras:
+            messagebox.showinfo("AVISO..!", f"NO HAY BUSQUEDAS PARA EL DEPARTAMENTO {departamento}")
+            return
+        
+        self.mostrar_resultados(obras, f"OBRAS DEL DEPARTAMENTO: {departamento}")
+    
+    def mostrarNacionalidades(self):
+        """Muestra una lista con todas las nacionalidades de los artistas."""
+        self.limpiarPantalla()
+        
+        ttk.Label(self.main_frame, text="INDIQUE UNA NACIONALIDAD:", font=("Arial", 12)).pack(pady=10)
+        
+        list_frame = ttk.Frame(self.main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.nacionalidades_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=("Arial", 11), height=15)
+        self.nacionalidades_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.nacionalidades_list.yview)
+        
+        for nacionalidad_artista in sorted(self.catalogo.nacionalidades):
+            self.nacionalidades_list.insert(tk.END, nacionalidad_artista)
+        
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(btn_frame, text="SELECCIONE", command=self.seleccionarNacionalidad).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="ATRAS", command=self.mostrarPantallaInicio).pack(side=tk.LEFT, padx=5)
+        
+        self.actualizarEstado(f"{len(self.catalogo.nacionalidades)} NACIONALIDADES DISPONIBLES")
+    
+    def seleccionarNacionalidad(self):
+        """Busca las obras de la nacionalidad que seleccionaste."""
+        seleccion = self.nacionalidades_list.curselection()
+        if not seleccion:
+            messagebox.showwarning("AVISO", "DEBE INGRESAR LA NACIONALIDAD..!")
+            return
+        
+        nacionalidad_artista = self.nacionalidades_list.get(seleccion[0])
+        obras = self.catalogo.buscarPorNacionalidad(nacionalidad_artista)
+        
+        if not obras:
+            messagebox.showinfo("AVISO", f"NO HAY OBRAS DEL ARTISTA {nacionalidad_artista}s")
+            return
+        
+        self.mostrar_resultados(obras, f"OBRAS DEL ARTISTA {nacionalidad_artista}s")
 
+    def buscarPorArtista(self):
+        """Muestra la caja de texto para que escribas el nombre de un artista."""
+        self.limpiarPantalla()
+        
+        ttk.Label(self.main_frame, text="INGRESE EL NOMBRE DEL ARTISTA..!:", font=("Arial", 12)).pack(pady=10)
+        
+        self.artista_entry = ttk.Entry(self.main_frame, font=("Arial", 12), width=40)
+        self.artista_entry.pack(pady=10)
+        self.artista_entry.focus()
+        
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(btn_frame, text="BUSCAR", command=self.realizar_busqueda_artista).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="ATRAS", command=self.mostrarPantallaInicio).pack(side=tk.LEFT, padx=5)
+        
+        self.actualizarEstado("INGRESE PARTE DEL NOMBRE DEL ARTISTA..!")
+
+    def realizar_busqueda_artista(self):
+        """Busca las obras con el nombre de artista que escribiste."""
+        nombre = self.artista_entry.get().strip()
+        if not nombre:
+            messagebox.showwarning("AVISO", "INGRESE UN NOMBRE DEL ARTISTA..!")
+            return
+        
+        obras = self.catalogo.buscarPorArtista(nombre)
+        
+        if not obras:
+            messagebox.showinfo("AVISO", f"NO HAY OBRAS PARA ESTE ARTISTA '{nombre}'")
+            return
+        
+        self.mostrar_resultados(obras, f"OBRAS DEL ARTISTA: {nombre}")
+    
+    def mostrar_resultados(self, obras, titulo):
+        """Muestra la lista de obras que encontró la búsqueda."""
+        self.limpiarPantalla()
+        
+        ttk.Label(self.main_frame, text=titulo, font=("Arial", 12, "bold")).pack(pady=10)
+        ttk.Label(self.main_frame, text=f"{len(obras)} OBRAS ENCONTRADAS", font=("Arial", 10)).pack()
+        
+        list_frame = ttk.Frame(self.main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Tabla para mostrar los resultados de forma ordenada
+        self.resultados_list = ttk.Treeview(
+            list_frame,
+            columns=('id', 'titulo', 'artista'),
+            show='headings',
+            yscrollcommand=scrollbar.set,
+            selectmode='browse',
+            height=15
+        )
+        scrollbar.config(command=self.resultados_list.yview)
+        
+        self.resultados_list.heading('id', text='ID DEL ARTISTA')
+        self.resultados_list.column('id', width=50, anchor=tk.CENTER)
+        
+        self.resultados_list.heading('titulo', text='TITULO DE LA OBRA')
+        self.resultados_list.column('titulo', width=50, anchor=tk.W)
+        
+        self.resultados_list.heading('artista', text='NOMBRE DEL ARTISTA')
+        self.resultados_list.column('artista', width=50, anchor=tk.W)
+        
+        self.resultados_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        for obra in obras:
+            self.resultados_list.insert('', tk.END, values=(obra.id_obra, obra.titulo, obra.artista))
+        
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(btn_frame, text="VER DETALLES", command=self.verDetallesObra).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="VOLVER", command=self.mostrarPantallaInicio).pack(side=tk.LEFT, padx=5)
+        
+        self.actualizarEstado(f"MOSTRANDO {len(obras)} OBRAS - SELECCIONE UNA PARA VER LOS DETALLES")
+    
+    def verDetallesObra(self):
+        """Toma la obra seleccionada de la lista y muestra todos sus detalles."""
+        seleccion = self.resultados_list.selection()
+        if not seleccion:
+            messagebox.showwarning("AVISO", "DEBE SELECCIONAR UNA OBRA..!")
+            return
+        
+        item = self.resultados_list.item(seleccion[0])
+        id_obra = item['values'][0]
+        obra = self.catalogo.obtenerObraPorId(id_obra)
+        
+        if not obra:
+            messagebox.showerror("AVISO", "NO SE PUDO OBTENER DETALLES DE LA OBRA..!")
+            return
+        
+        self.mostrarDetallesObra(obra)
+    
+    def mostrarDetallesObra(self, obra):
+        """
+        Muestra la información completa de una obra y un botón para
+        ver la imagen.
+        """
+        self.limpiarPantalla()
+        
+        detalles_frame = ttk.Frame(self.main_frame)
+        detalles_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        ttk.Label(detalles_frame, text="RESULTADOS DE ESTA OBRA", font=("Arial", 14, "bold")).pack(pady=10)
+        
+        detalles_text = tk.Text(detalles_frame, wrap=tk.WORD, font=("Arial", 11), height=10, padx=10, pady=10)
+        detalles_text.insert(tk.END, obra.mostrarDetalles())
+        detalles_text.config(state=tk.DISABLED) # No deja que el texto sea editado
+        detalles_text.pack(fill=tk.X, pady=10)
+        
+        btn_frame = ttk.Frame(detalles_frame)
+        btn_frame.pack(pady=20)
+        
+        if obra.urlImagen:
+            ttk.Button(btn_frame, text="VER IMAGEN", command=lambda: self.mostrarImagenObra(obra), width=15).pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(btn_frame, text="VOLVER A RESULTADOS", command=self.mostrarPantallaInicio, width=20).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_frame, text="INICIO", command=self.mostrarPantallaInicio, width=20).pack(side=tk.LEFT, padx=10)
+        
+        self.actualizarEstado(f"MOSTRANDO LOS DETALLES DE LA OBRA ID: {obra.id_obra}")
+    
+    def mostrarImagenObra(self, obra):
+        """Abre una ventana nueva para mostrar la imagen de la obra."""
+        try:
+            imagen_window = tk.Toplevel(self.root)
+            imagen_window.title(f"IMAGEN: {obra.titulo}")
+            
+            loading_label = ttk.Label(imagen_window, text="CARGANDO IMAGEN...", font=("Arial", 12))
+            loading_label.pack(pady=50)
+            imagen_window.update()
+            
+            def cargar_imagen():
+                try:
+                    response = requests.get(obra.urlImagen, timeout=10)
+                    img_data = response.content
+                    img = Image.open(BytesIO(img_data))
+                    
