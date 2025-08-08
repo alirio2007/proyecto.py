@@ -462,3 +462,42 @@ class InterfazCatalogo:
                     img_data = response.content
                     img = Image.open(BytesIO(img_data))
                     
+                    # Ajusta el tamaño de la imagen para que no sea muy grande
+                    ancho, alto = img.size
+                    max_ancho, max_alto = 800, 600
+                    if ancho > max_ancho or alto > max_alto:
+                        ratio = min(max_ancho/ancho, max_alto/alto)
+                        nuevo_ancho = int(ancho * ratio)
+                        nuevo_alto = int(alto * ratio)
+                        img = img.resize((nuevo_ancho, nuevo_alto), Image.LANCZOS)
+                    
+                    img_tk = ImageTk.PhotoImage(img)
+                    
+                    # Muestra la imagen en la ventana
+                    loading_label.destroy()
+                    label_imagen = ttk.Label(imagen_window, image=img_tk)
+                    label_imagen.image = img_tk
+                    label_imagen.pack()
+                
+                except Exception as e:
+                    loading_label.destroy()
+                    messagebox.showerror("AVISO", f"NO SE PUEDO CARGAR LA IMAGEN: {str(e)}", parent=imagen_window)
+                    imagen_window.destroy()
+            
+            # Descarga la imagen en segundo plano
+            threading.Thread(target=cargar_imagen, daemon=True).start()
+            
+        except Exception as e:
+            messagebox.showerror("AVISO..!", f"LA IMAGEN NO PUDO SER MOSTRADA..!: {str(e)}")
+
+def main():
+    """ESTA ES LA PARTE QUE ARRANCA EL PROGRAMA CUANDO SE ABRE"""
+    try:
+        root = tk.Tk()
+        app = InterfazCatalogo(root)
+        root.mainloop() # MANTIENE LA VENTANA ABIERTA Y ESPERANDO A QUE SE USE
+    except Exception as e:
+        messagebox.showerror("AVISO", f"ERROR AL CARGAR LA APLICACION..!: {str(e)}")
+
+if __name__ == "__main__":
+    main()
